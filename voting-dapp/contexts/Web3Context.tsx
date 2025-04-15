@@ -3,13 +3,16 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { votingContract, Candidate, Voter } from '@/lib/blockchain/contract';
 import { toast } from "sonner";
+import { networkConfig } from '@/lib/blockchain/config';
 
 interface Web3ContextType {
   account: string | null;
   isAdmin: boolean;
   isConnected: boolean;
   isInitializing: boolean;
+  currentRpcUrl: string | null;
   connectWallet: () => Promise<boolean>;
+  connectToNode: (rpcUrl: string) => Promise<boolean>;
   voterInfo: Voter | null;
   candidates: Candidate[];
   electionStarted: boolean;
@@ -51,6 +54,7 @@ export function Web3Provider({ children }: Web3ProviderProps) {
   const [electionStarted, setElectionStarted] = useState(false);
   const [electionEnded, setElectionEnded] = useState(false);
   const [voterListCID, setVoterListCID] = useState<string | null>(null);
+  const [currentRpcUrl, setCurrentRpcUrl] = useState<string | null>(null);
 
   const refreshCandidates = useCallback(async () => {
     try {
@@ -74,38 +78,92 @@ export function Web3Provider({ children }: Web3ProviderProps) {
   }, []);
 
   useEffect(() => {
-    const initialize = async () => {
-      try {
-        const success = await votingContract.initialize();
-        
-        if (success) {
-          const currentAccount = await votingContract.getCurrentAccount();
-          if (currentAccount) {
-            setAccount(currentAccount.toLowerCase());
-            setIsConnected(true);
-            
-            const admin = await votingContract.getAdmin();
-            setIsAdmin(currentAccount.toLowerCase() === admin?.toLowerCase());
-            
-            const info = await votingContract.getVoterInfo(currentAccount);
-            setVoterInfo(info);
-            
-            await refreshCandidates();
-            await refreshElectionStatus();
-          }
-        }
-      } catch (error) {
-        console.error("Failed to initialize Web3:", error);
-        toast.error("Error", {
-          description: "Failed to connect to blockchain. Is the node running?"
-        });
-      } finally {
-        setIsInitializing(false);
-      }
-    };
+    const savedRpcUrl = localStorage.getItem('lastConnectedNode');
+    if (savedRpcUrl) {
+      connectToNode(savedRpcUrl).catch(console.error);
+    } else {
+      initialize();
+    }
+  }, []);
 
-    initialize();
-  }, [refreshCandidates, refreshElectionStatus]);
+  const initialize = async () => {
+    setIsInitializing(true);
+    try {
+      const success = await votingContract.initialize();
+      
+      if (success) {
+        setCurrentRpcUrl(networkConfig.rpcUrl);
+        const currentAccount = await votingContract.getCurrentAccount();
+        if (currentAccount) {
+          setAccount(currentAccount.toLowerCase());
+          setIsConnected(true);
+          
+          const admin = await votingContract.getAdmin();
+          setIsAdmin(currentAccount.toLowerCase() === admin?.toLowerCase());
+          
+          const info = await votingContract.getVoterInfo(currentAccount);
+          setVoterInfo(info);
+          
+          await refreshCandidates();
+          await refreshElectionStatus();
+        }
+      }
+    } catch (error) {
+      console.error("Failed to initialize Web3:", error);
+      toast.error("Error", {
+        description: "Failed to connect to blockchain. Is the node running?"
+      });
+      setIsConnected(false);
+    } finally {
+      setIsInitializing(false);
+    }
+  };
+
+  const connectToNode = async (rpcUrl: string): Promise<boolean> => {
+    setIsInitializing(true);
+    try {
+      const success = await votingContract.connectToRpcUrl(rpcUrl);
+      
+      if (success) {
+        setCurrentRpcUrl(rpcUrl);
+        localStorage.setItem('lastConnectedNode', rpcUrl);
+        
+        const currentAccount = await votingContract.getCurrentAccount();
+        if (currentAccount) {
+          setAccount(currentAccount.toLowerCase());
+          setIsConnected(true);
+          
+          const admin = await votingContract.getAdmin();
+          setIsAdmin(currentAccount.toLowerCase() === admin?.toLowerCase());
+          
+          const info = await votingContract.getVoterInfo(currentAccount);
+          setVoterInfo(info);
+          
+          await refreshCandidates();
+          await refreshElectionStatus();
+          
+          toast.success("Connected", {
+            description: `Successfully connected to ${rpcUrl}`
+          });
+          return true;
+        }
+      }
+      
+      toast.error("Connection failed", {
+        description: "Could not connect to the specified blockchain node"
+      });
+      return false;
+    } catch (error) {
+      console.error("Error connecting to node:", error);
+      toast.error("Connection error", {
+        description: `Failed to connect to ${rpcUrl}`
+      });
+      setIsConnected(false);
+      return false;
+    } finally {
+      setIsInitializing(false);
+    }
+  };
 
   const connectWallet = async (): Promise<boolean> => {
     try {
@@ -266,7 +324,9 @@ export function Web3Provider({ children }: Web3ProviderProps) {
     isAdmin,
     isConnected,
     isInitializing,
+    currentRpcUrl,
     connectWallet,
+    connectToNode,
     voterInfo,
     candidates,
     electionStarted,

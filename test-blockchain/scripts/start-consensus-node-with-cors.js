@@ -82,10 +82,34 @@ async function startConsensusNode() {
       fs.mkdirSync(dataDir, { recursive: true });
     }
 
-    // Start the consensus node - CORS is configured in hardhat.config.js
+    // Start the consensus node with connection to mining node
     const port = 8546; 
-    const command = `npx hardhat node --hostname ${localIp} --port ${port}`;
     
+    // Create temporary network config to connect to mining node
+    const tempConfigPath = path.join(__dirname, '../temp-mining-config.js');
+    const networkConfig = `
+module.exports = {
+  networks: {
+    'mining-node': {
+      url: "http://${miningNodeIp}:8545",
+      chainId: 1337,
+      gasPrice: 20000000000,
+      accounts: {
+        mnemonic: "voting voting voting voting voting voting voting voting voting voting voting junk"
+      },
+      mining: {
+        auto: false
+      }
+    }
+  }
+};`;
+    
+    // Write temporary config file
+    fs.writeFileSync(tempConfigPath, networkConfig);
+    console.log(`Created temporary connection config to mining node`);
+    
+    // Create custom command referencing the temp config
+    const command = `npx hardhat node --hostname ${localIp} --port ${port} --config ${tempConfigPath}`;
     console.log(`Running command: ${command}`);
     
     const nodeProcess = exec(command, (error, stdout, stderr) => {

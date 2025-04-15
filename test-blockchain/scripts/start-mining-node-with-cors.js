@@ -75,9 +75,20 @@ function startNodeWithIp(localIp) {
 
   // Start the mining node with hardhat network
   // Note: CORS is configured in hardhat.config.js
-  const command = `npx hardhat node --hostname ${localIp} --port 8545`;
+  const port = 8545;
+  const command = `npx hardhat node --hostname ${localIp} --port ${port} --network mining_node`;
   
   console.log(`Running command: ${command}`);
+  
+  // Create network configuration that can be used by consensus nodes
+  const networkInfoPath = path.join(__dirname, '../network-info.json');
+  const networkInfo = {
+    miningNodeIp: localIp,
+    miningNodePort: port,
+    chainId: 1337,
+    networkId: 1337
+  };
+  fs.writeFileSync(networkInfoPath, JSON.stringify(networkInfo, null, 2));
   
   const nodeProcess = exec(command, (error, stdout, stderr) => {
     if (error) {
@@ -93,7 +104,7 @@ function startNodeWithIp(localIp) {
   
   // Display instructions
   console.log(`\n=====================================================`);
-  console.log(`Mining node started at http://${localIp}:8545`);
+  console.log(`Mining node started at http://${localIp}:${port}`);
   console.log(`CORS has been enabled through Hardhat config`);
   console.log(`\nThis is the main mining node. Other nodes can connect to this.`);
   console.log(`\nTo deploy the voting contract, run:`);

@@ -96,6 +96,53 @@ export class VotingContract {
     }
   }
 
+  async connectToRpcUrl(rpcUrl: string): Promise<boolean> {
+    try {
+      // Create a new JsonRpcProvider with the provided URL
+      const jsonRpcProvider = new ethers.JsonRpcProvider(rpcUrl);
+      this.provider = jsonRpcProvider;
+      
+      try {
+        // Test the connection by requesting chain ID
+        const chainId = await jsonRpcProvider.getChainId();
+        console.log(`Connected to chain ID: ${chainId}`);
+        
+        // Try to get accounts
+        const accounts = await jsonRpcProvider.listAccounts();
+        if (accounts.length > 0) {
+          // Create a signer from the provider and the first account
+          this.signer = await jsonRpcProvider.getSigner(accounts[0].address);
+          
+          // Create contract instance with signer
+          this.contract = new ethers.Contract(
+            this.contractAddress,
+            VotingABI,
+            this.signer
+          );
+          
+          return true;
+        } else {
+          console.error("No accounts available from RPC provider");
+          
+          // Still create a contract instance with provider (read-only)
+          this.contract = new ethers.Contract(
+            this.contractAddress,
+            VotingABI,
+            jsonRpcProvider
+          );
+          
+          return true; // Return true for read-only access
+        }
+      } catch (providerError) {
+        console.error("Error connecting to provider:", providerError);
+        return false;
+      }
+    } catch (error) {
+      console.error("Failed to connect to RPC URL:", error);
+      return false;
+    }
+  }
+
   async getAdmin(): Promise<string | null> {
     try {
       if (!this.contract) await this.initialize();
