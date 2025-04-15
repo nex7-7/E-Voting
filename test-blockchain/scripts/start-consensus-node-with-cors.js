@@ -82,9 +82,9 @@ async function startConsensusNode() {
       fs.mkdirSync(dataDir, { recursive: true });
     }
 
-    // Start the consensus node with CORS enabled
+    // Start the consensus node - CORS is configured in hardhat.config.js
     const port = 8546; 
-    const command = `npx hardhat node --hostname ${localIp} --port ${port} --cors "*"`;
+    const command = `npx hardhat node --hostname ${localIp} --port ${port}`;
     
     console.log(`Running command: ${command}`);
     
@@ -103,7 +103,7 @@ async function startConsensusNode() {
     // Display instructions
     console.log(`\n=====================================================`);
     console.log(`Consensus node started at http://${localIp}:${port}`);
-    console.log(`CORS has been enabled to allow requests from any origin`);
+    console.log(`CORS has been enabled through Hardhat config`);
     console.log(`Connected to mining node at ${miningNodeIp}:8545`);
     console.log(`=====================================================\n`);
     

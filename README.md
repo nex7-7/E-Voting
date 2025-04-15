@@ -45,7 +45,9 @@ Before you begin, ensure you have the following installed:
    This script will:
    - List available IP addresses on your machine
    - Let you select which IP to use (choose the one on your local network)
-   - Start a Hardhat node with CORS enabled to allow cross-origin requests
+   - Start a Hardhat node with CORS enabled through the Hardhat configuration
+
+   Note: CORS is configured in the hardhat.config.js file and doesn't require additional parameters.
 
 4. Deploy the voting contract:
    ```
@@ -205,6 +207,7 @@ To connect from a mobile device:
   2. Check that your MetaMask is configured with the correct RPC URL and Chain ID
   3. Ensure your blockchain node IP is correctly set in the frontend config
   4. Try clearing your browser cache or using a different browser
+  5. Ensure the hardhat.config.js has the proper CORS configuration in the node settings
 
 ### General Troubleshooting
 - If the blockchain connection fails, make sure:

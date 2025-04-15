@@ -85,5 +85,16 @@ module.exports = {
       url: "http://0.0.0.0:8545",  // Listen on all interfaces
       chainId: 1337
     }
+  },
+  // Add node configuration with CORS settings
+  node: {
+    http: {
+      cors: "*",  // Allow any origin to access the JSON-RPC server
+      headers: {  // Additional headers for better CORS support
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "X-Requested-With, Content-Type, Accept, Origin, Authorization"
+      }
+    }
   }
 };
