@@ -1,8 +1,8 @@
 require("@nomicfoundation/hardhat-toolbox");
-const { uploadToIPFS, getIPFSUrl, stopIPFS } = require('./scripts/js-ipfs-config');
+const { uploadToIPFS, getIPFSUrl } = require('./scripts/ipfs-config');
 
 // IPFS task to test connection
-task("ipfs-test", "Tests connection to IPFS using js-ipfs")
+task("ipfs-test", "Tests connection to IPFS using local node")
   .setAction(async () => {
     try {
       const content = "Hello, IPFS from Hardhat task! " + new Date().toISOString();
@@ -10,19 +10,65 @@ task("ipfs-test", "Tests connection to IPFS using js-ipfs")
       const cid = await uploadToIPFS(Buffer.from(content));
       console.log(`Content uploaded! CID: ${cid}`);
       console.log(`You can view it at: ${getIPFSUrl(cid)}`);
-      await stopIPFS();
     } catch (error) {
       console.error("IPFS connection failed:", error.message);
-      await stopIPFS();
     }
   });
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
-  solidity: "0.8.26",
+  solidity: {
+    compilers: [
+      {
+        version: "0.8.19",
+      },
+      {
+        version: "0.8.28",
+      }
+    ]
+  },
+  defaultNetwork: "local",
   networks: {
-    hardhat: {
-      chainId: 1337
-    }
+    local: {
+      url: "http://127.0.0.1:8545",
+      chainId: 31337,
+      accounts: {
+        mnemonic: "test test test test test test test test test test test junk"
+      }
+    },
+    // Define a custom local network that can be joined by other nodes
+    voting_network: {
+      url: "http://127.0.0.1:8545",
+      chainId: 1337, // Custom chain ID
+      gasPrice: 20000000000,
+      accounts: {
+        mnemonic: "voting voting voting voting voting voting voting voting voting voting voting junk"
+      }
+    },
+    // Configuration for nodes that join the network (not mining)
+    consensus_node: {
+      url: "http://0.0.0.0:8545",
+      chainId: 1337,
+      gasPrice: 20000000000,
+      accounts: {
+        mnemonic: "voting voting voting voting voting voting voting voting voting voting voting junk"
+      },
+      mining: {
+        auto: false
+      }
+    },
+    // Configuration for mining nodes
+    mining_node: {
+      url: "http://0.0.0.0:8546",
+      chainId: 1337,
+      gasPrice: 20000000000,
+      accounts: {
+        mnemonic: "voting voting voting voting voting voting voting voting voting voting voting junk"
+      },
+      mining: {
+        auto: true,
+        interval: 5000 // Mining interval in milliseconds
+      }
+    },
   }
 };

@@ -1,53 +1,81 @@
+// Test script to verify IPFS functionality
+const { uploadToIPFS, getIPFSUrl, uploadJsonToIPFS } = require('./ipfs-config');
 const fs = require('fs');
 const path = require('path');
-const { uploadToIPFS, getIPFSUrl } = require('./ipfs-config');
+const readline = require('readline');
+
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout
+});
 
 async function main() {
+  console.log('Testing IPFS connection and functionality...');
+  
   try {
-    // Check if IPFS node is running
-    console.log('Testing connection to local IPFS node...');
+    // Test basic text upload
+    const testText = `Hello from IPFS test! Timestamp: ${new Date().toISOString()}`;
+    console.log(`Uploading test string: "${testText}"`);
     
-    // Create a test directory if it doesn't exist
-    const testDir = path.join(__dirname, '../test-images');
-    if (!fs.existsSync(testDir)) {
-      fs.mkdirSync(testDir);
-    }
+    const textCid = await uploadToIPFS(Buffer.from(testText));
+    console.log(`Text uploaded successfully! CID: ${textCid}`);
+    console.log(`You can view it at: ${getIPFSUrl(textCid)}`);
     
-    // Create a test image path (assuming you have an image there)
-    // If not, this will create a text file instead
-    const testFilePath = path.join(testDir, 'test-image.jpg');
+    // Test JSON upload
+    const testJson = {
+      name: "Test Election",
+      timestamp: new Date().toISOString(),
+      message: "This is a test of IPFS JSON storage",
+      nested: {
+        data: [1, 2, 3],
+        boolean: true
+      }
+    };
     
-    let content;
-    if (fs.existsSync(testFilePath)) {
-      console.log('Reading existing image file...');
-      content = fs.readFileSync(testFilePath);
-    } else {
-      console.log('Creating a test text file instead...');
-      content = Buffer.from('This is a test file for IPFS upload from Hardhat');
-      fs.writeFileSync(path.join(testDir, 'test.txt'), content);
-    }
+    console.log('\nUploading test JSON:');
+    console.log(JSON.stringify(testJson, null, 2));
     
-    // Upload to IPFS
-    console.log('Uploading to IPFS...');
-    const cid = await uploadToIPFS(content);
+    const jsonCid = await uploadJsonToIPFS(testJson);
+    console.log(`JSON uploaded successfully! CID: ${jsonCid}`);
+    console.log(`You can view it at: ${getIPFSUrl(jsonCid)}`);
     
-    console.log('✅ Successfully uploaded to IPFS!');
-    console.log(`CID: ${cid}`);
-    console.log(`URL: ${getIPFSUrl(cid)}`);
-    console.log('\nYou can use this CID in your Voting contract\'s addCandidate method');
-    
-    // Write the CID to a file for later use
-    fs.writeFileSync(path.join(testDir, 'last-upload-cid.txt'), cid);
-    
+    // Ask user if they want to test file upload
+    rl.question('\nWould you like to test uploading an image file? (yes/no): ', async (answer) => {
+      if (answer.toLowerCase() === 'yes') {
+        rl.question('Enter the path to an image file: ', async (filePath) => {
+          try {
+            console.log(`Uploading file: ${filePath}`);
+            
+            if (!fs.existsSync(filePath)) {
+              console.error(`File not found: ${filePath}`);
+              rl.close();
+              return;
+            }
+            
+            const fileBuffer = fs.readFileSync(filePath);
+            const fileCid = await uploadToIPFS(fileBuffer);
+            
+            console.log(`File uploaded successfully! CID: ${fileCid}`);
+            console.log(`You can view it at: ${getIPFSUrl(fileCid)}`);
+            rl.close();
+          } catch (error) {
+            console.error(`Error uploading file: ${error.message}`);
+            rl.close();
+          }
+        });
+      } else {
+        console.log('Skipping file upload test.');
+        rl.close();
+      }
+    });
   } catch (error) {
-    console.error('❌ Error:', error);
-    console.log('Make sure your local IPFS node is running!');
+    console.error(`IPFS test failed: ${error.message}`);
+    console.log('\nPlease make sure:');
+    console.log('1. IPFS daemon is running (start with "ipfs daemon")');
+    console.log('2. IPFS HTTP API is accessible at http://localhost:5001');
+    console.log('3. You have ipfs-http-client installed (npm install ipfs-http-client)');
+    rl.close();
   }
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch(error => {
-    console.error(error);
-    process.exit(1);
-  });
+main().catch(console.error);

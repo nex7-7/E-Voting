@@ -1,55 +1,75 @@
-const hre = require("hardhat");
+// Script to deploy the contract and set up initial IPFS data
+const { ethers } = require("hardhat");
 const fs = require('fs');
 const path = require('path');
 const { uploadToIPFS } = require('./ipfs-config');
 
 async function main() {
-  // Check if a default image exists to upload
-  const testImgPath = path.join(__dirname, '../test-images/default-candidate.jpg');
-  let defaultCid = '';
+  // Get the IP from command line args or use default
+  const targetIp = process.argv[2] || "192.168.29.203";
+  console.log(`Deploying to node at: ${targetIp}:8545`);
   
-  try {
-    if (fs.existsSync(testImgPath)) {
-      console.log('Uploading default candidate image to IPFS...');
-      const imgContent = fs.readFileSync(testImgPath);
-      defaultCid = await uploadToIPFS(imgContent);
-      console.log(`Image uploaded with CID: ${defaultCid}`);
-    } else {
-      console.log('No default image found, using placeholder CID');
-      defaultCid = 'QmdefaultPlaceholderCIDfornowReplaceThis';
-    }
-  } catch (error) {
-    console.warn('IPFS upload failed, using placeholder CID:', error.message);
-    defaultCid = 'QmdefaultPlaceholderCIDfornowReplaceThis';
+  // Use a custom provider pointing to the running node
+  const provider = new ethers.JsonRpcProvider(`http://${targetIp}:8545`);
+  
+  // Get the first account as signer
+  const accounts = await provider.listAccounts();
+  if (accounts.length === 0) {
+    console.error("No accounts found. Make sure the node is running.");
+    process.exit(1);
   }
   
+  const signer = accounts[0];
+  console.log(`Using account: ${signer.address}`);
+
+  // Check if IPFS is running
+  try {
+    console.log("Checking IPFS connection...");
+    const testCid = await uploadToIPFS(Buffer.from("Test IPFS connection"));
+    console.log(`IPFS connection successful. Test CID: ${testCid}`);
+  } catch (error) {
+    console.error("WARNING: IPFS connection failed:", error.message);
+    console.log("Continuing without IPFS verification...");
+  }
+
   // Deploy the Voting contract
-  const Voting = await hre.ethers.getContractFactory("Voting");
+  console.log("Deploying Voting contract...");
+  const Voting = await ethers.getContractFactory("Voting", signer);
   const voting = await Voting.deploy();
-  
-  // Wait for deployment to complete
   await voting.waitForDeployment();
 
-  console.log("Voting contract deployed to:", voting.target);
+  const votingAddress = await voting.getAddress();
+  console.log(`Voting contract deployed to: ${votingAddress}`);
 
-  // Add sample candidates
-  console.log("Adding candidates...");
-  await voting.addCandidate("Candidate 1", "First candidate description", defaultCid);
-  await voting.addCandidate("Candidate 2", "Second candidate description", defaultCid);
-  console.log("Candidates added successfully");
+  // Update the contract address in the frontend configuration
+  updateContractAddress(votingAddress, targetIp);
+
+  console.log("Deployment complete!");
+}
+
+function updateContractAddress(address, nodeIp) {
+  const configPath = path.resolve(__dirname, '../../voting-dapp/lib/blockchain/config.ts');
   
-  // Save the deployment info
-  const deploymentInfo = {
-    votingContract: voting.target,
-    defaultCid: defaultCid,
-    timestamp: new Date().toISOString()
-  };
-  
-  fs.writeFileSync(
-    path.join(__dirname, '../deployment-info.json'), 
-    JSON.stringify(deploymentInfo, null, 2)
-  );
-  console.log('Deployment info saved to deployment-info.json');
+  try {
+    // Create new config content
+    const configContent = `// Blockchain connection configuration
+export const networkConfig = {
+  rpcUrl: 'http://${nodeIp}:8545',
+  chainId: 1337, // Custom chain ID for our voting network
+  contractAddress: '${address}' // Contract address from deployment
+};
+`;
+    
+    // Write the updated config
+    fs.writeFileSync(configPath, configContent);
+    console.log(`Contract address updated in frontend configuration: ${address}`);
+    console.log(`Node IP updated in frontend configuration: ${nodeIp}`);
+  } catch (error) {
+    console.warn("Warning: Could not update the contract address in the frontend configuration.");
+    console.warn("Please update it manually in voting-dapp/lib/blockchain/config.ts");
+    console.warn(`Contract address: ${address}`);
+    console.warn(`Node IP: ${nodeIp}`);
+  }
 }
 
 main()

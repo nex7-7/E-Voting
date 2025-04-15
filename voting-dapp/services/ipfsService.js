@@ -1,19 +1,22 @@
-import { create } from 'ipfs-http-client';
+import { unixfs } from '@helia/unixfs';
+import { createHeliaHTTP } from '@helia/http';
 
-// Configure auth for Infura IPFS
-const projectId = process.env.NEXT_PUBLIC_INFURA_IPFS_PROJECT_ID;
-const projectSecret = process.env.NEXT_PUBLIC_INFURA_IPFS_PROJECT_SECRET;
-const auth = 'Basic ' + Buffer.from(projectId + ':' + projectSecret).toString('base64');
+/**
+ * Create a connection to local IPFS node
+ * @returns {Promise<{client: Helia, fs: UnixFS}>} Helia client and UnixFS interface
+ */
+const createHeliaClient = async () => {
+  try {
+    // Connect to local IPFS node using createHeliaHTTP
+    const heliaClient = await createHeliaHTTP();
+    const fs = unixfs(heliaClient);
 
-// Create IPFS client
-const ipfs = create({
-  host: 'ipfs.infura.io',
-  port: 5001,
-  protocol: 'https',
-  headers: {
-    authorization: auth
+    return { client: heliaClient, fs };
+  } catch (error) {
+    console.error('Error creating Helia client:', error);
+    throw error;
   }
-});
+};
 
 /**
  * Upload a file to IPFS
@@ -26,9 +29,11 @@ export const uploadFileToIPFS = async (file) => {
     const buffer = await file.arrayBuffer();
     const fileBuffer = Buffer.from(buffer);
     
-    // Upload to IPFS
-    const result = await ipfs.add(fileBuffer);
-    return result.path;
+    // Create Helia client and upload file
+    const { client, fs } = await createHeliaClient();
+    const cid = await fs.addBytes(fileBuffer);
+    
+    return cid.toString();
   } catch (error) {
     console.error('Error uploading to IPFS:', error);
     throw error;
@@ -42,5 +47,26 @@ export const uploadFileToIPFS = async (file) => {
  */
 export const getIPFSUrl = (cid) => {
   if (!cid) return '';
-  return `https://ipfs.io/ipfs/${cid}`;
+  return `http://localhost:8080/ipfs/${cid}`;
+};
+
+/**
+ * Upload JSON data to IPFS
+ * @param {object} jsonData - JSON data to upload
+ * @returns {Promise<string>} The CID of the uploaded JSON
+ */
+export const uploadJsonToIPFS = async (jsonData) => {
+  try {
+    const jsonContent = JSON.stringify(jsonData, null, 2);
+    const jsonBuffer = Buffer.from(jsonContent);
+    
+    // Create Helia client and upload JSON
+    const { client, fs } = await createHeliaClient();
+    const cid = await fs.addBytes(jsonBuffer);
+    
+    return cid.toString();
+  } catch (error) {
+    console.error('Error uploading JSON to IPFS:', error);
+    throw error;
+  }
 };

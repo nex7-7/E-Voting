@@ -14,15 +14,17 @@ interface Web3ContextType {
   candidates: Candidate[];
   electionStarted: boolean;
   electionEnded: boolean;
+  voterListCID: string | null;
   refreshCandidates: () => Promise<void>;
   refreshElectionStatus: () => Promise<void>;
   addCandidate: (name: string, description: string, imageHash: string) => Promise<boolean>;
   registerVoter: (address: string) => Promise<boolean>;
   batchRegisterVoters: (addresses: string[]) => Promise<boolean>;
-  startElection: () => Promise<boolean>;
+  startElection: (voterListCID: string) => Promise<boolean>;
   endElection: () => Promise<boolean>;
   vote: (candidateName: string) => Promise<boolean>;
   getWinner: () => Promise<Candidate | null>;
+  getAllVoters: () => Promise<string[]>;
 }
 
 const Web3Context = createContext<Web3ContextType | undefined>(undefined);
@@ -48,15 +50,12 @@ export function Web3Provider({ children }: Web3ProviderProps) {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [electionStarted, setElectionStarted] = useState(false);
   const [electionEnded, setElectionEnded] = useState(false);
-  // Remove unused adminAddress state
+  const [voterListCID, setVoterListCID] = useState<string | null>(null);
 
-  // Memoize functions that interact with the blockchain to prevent infinite loops
-  // Because votingContract is a stable import, we can use empty dependency arrays
   const refreshCandidates = useCallback(async () => {
     try {
       const candidatesList = await votingContract.getCandidates();
       setCandidates(candidatesList);
-      // Remove the return statement to match Promise<void>
     } catch (error) {
       console.error("Error refreshing candidates:", error);
     }
@@ -64,42 +63,34 @@ export function Web3Provider({ children }: Web3ProviderProps) {
   
   const refreshElectionStatus = useCallback(async () => {
     try {
-      const startedStatus = await votingContract.isElectionStarted();
-      const endedStatus = await votingContract.isElectionEnded();
+      const { started, ended, voterListCID: cid } = await votingContract.getElectionStatus();
       
-      setElectionStarted(startedStatus);
-      setElectionEnded(endedStatus);
+      setElectionStarted(started);
+      setElectionEnded(ended);
+      setVoterListCID(cid || null);
     } catch (error) {
       console.error("Error refreshing election status:", error);
     }
   }, []);
 
-  // Initialize the connection and load data - run only once at mount
   useEffect(() => {
     const initialize = async () => {
       try {
         const success = await votingContract.initialize();
         
         if (success) {
-          // Get current account
           const currentAccount = await votingContract.getCurrentAccount();
           if (currentAccount) {
             setAccount(currentAccount.toLowerCase());
             setIsConnected(true);
             
-            // Check if the current account is the admin
             const admin = await votingContract.getAdmin();
-            // Don't store admin address since we don't use it
             setIsAdmin(currentAccount.toLowerCase() === admin?.toLowerCase());
             
-            // Get voter info
             const info = await votingContract.getVoterInfo(currentAccount);
             setVoterInfo(info);
             
-            // Load candidates
             await refreshCandidates();
-            
-            // Check election status
             await refreshElectionStatus();
           }
         }
@@ -114,12 +105,10 @@ export function Web3Provider({ children }: Web3ProviderProps) {
     };
 
     initialize();
-  }, [refreshCandidates, refreshElectionStatus]); // Add stable callback dependencies
+  }, [refreshCandidates, refreshElectionStatus]);
 
   const connectWallet = async (): Promise<boolean> => {
     try {
-      // With JsonRpcProvider, we're already connected to the first account
-      // Just reinitialize to get the current state
       return await votingContract.initialize();
     } catch (error) {
       console.error("Error connecting wallet:", error);
@@ -130,7 +119,15 @@ export function Web3Provider({ children }: Web3ProviderProps) {
     }
   };
 
-  // Fix other functions to break circular dependencies
+  const getAllVoters = useCallback(async () => {
+    try {
+      return await votingContract.getAllVoters();
+    } catch (error) {
+      console.error("Error getting all voters:", error);
+      return [];
+    }
+  }, []);
+
   const addCandidate = useCallback(async (name: string, description: string, imageHash: string) => {
     try {
       const success = await votingContract.addCandidate(name, description, imageHash);
@@ -138,7 +135,6 @@ export function Web3Provider({ children }: Web3ProviderProps) {
         toast.success("Success", {
           description: `Candidate ${name} added successfully`
         });
-        // Call the function directly instead of depending on it
         await refreshCandidates();
       }
       return success;
@@ -149,7 +145,7 @@ export function Web3Provider({ children }: Web3ProviderProps) {
       });
       return false;
     }
-  }, [refreshCandidates]); // Add refreshCandidates as dependency
+  }, [refreshCandidates]);
   
   const registerVoter = useCallback(async (address: string) => {
     try {
@@ -187,11 +183,12 @@ export function Web3Provider({ children }: Web3ProviderProps) {
     }
   }, []);
   
-  const startElection = useCallback(async () => {
+  const startElection = useCallback(async (voterListCID: string) => {
     try {
-      const success = await votingContract.startElection();
+      const success = await votingContract.startElection(voterListCID);
       if (success) {
         setElectionStarted(true);
+        setVoterListCID(voterListCID);
         toast.success("Success", {
           description: "Election started successfully"
         });
@@ -205,7 +202,7 @@ export function Web3Provider({ children }: Web3ProviderProps) {
       });
       return false;
     }
-  }, [refreshElectionStatus]); // Add refreshElectionStatus as dependency
+  }, [refreshElectionStatus]);
   
   const endElection = useCallback(async () => {
     try {
@@ -225,7 +222,7 @@ export function Web3Provider({ children }: Web3ProviderProps) {
       });
       return false;
     }
-  }, [refreshElectionStatus]); // Add refreshElectionStatus as dependency
+  }, [refreshElectionStatus]);
   
   const vote = useCallback(async (candidateName: string) => {
     try {
@@ -235,13 +232,11 @@ export function Web3Provider({ children }: Web3ProviderProps) {
           description: `Vote for ${candidateName} recorded successfully`
         });
         
-        // Update voter info
         if (account) {
           const info = await votingContract.getVoterInfo(account);
           setVoterInfo(info);
         }
         
-        // Call the function directly instead of depending on it
         await refreshCandidates();
       }
       return success;
@@ -252,7 +247,7 @@ export function Web3Provider({ children }: Web3ProviderProps) {
       });
       return false;
     }
-  }, [account, refreshCandidates]); // Add refreshCandidates to the dependency array
+  }, [account, refreshCandidates]);
   
   const getWinner = useCallback(async () => {
     try {
@@ -264,7 +259,7 @@ export function Web3Provider({ children }: Web3ProviderProps) {
       });
       return null;
     }
-  }, []); // No dependencies required
+  }, []);
 
   const value = {
     account,
@@ -276,6 +271,7 @@ export function Web3Provider({ children }: Web3ProviderProps) {
     candidates,
     electionStarted,
     electionEnded,
+    voterListCID,
     refreshCandidates,
     refreshElectionStatus,
     addCandidate,
@@ -285,6 +281,7 @@ export function Web3Provider({ children }: Web3ProviderProps) {
     endElection,
     vote,
     getWinner,
+    getAllVoters,
   };
 
   return <Web3Context.Provider value={value}>{children}</Web3Context.Provider>;

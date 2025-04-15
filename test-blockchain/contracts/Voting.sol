@@ -16,9 +16,18 @@ contract Voting {
     mapping(address => bool) public allowedVoters;
     address public admin;
     
+    // Election status
+    bool public electionStarted;
+    bool public electionEnded;
+    
+    // IPFS hash for voter list
+    string public voterListCID;
+    
     event CandidateAdded(uint256 id, string name, string description, string ipfsImageHash);
     event VoteCast(address voter, uint256 candidateId);
     event VoterAdded(address voter);
+    event ElectionStarted(string voterListCID);
+    event ElectionEnded();
     
     constructor() {
         admin = msg.sender;
@@ -34,8 +43,16 @@ contract Voting {
         _;
     }
     
+    modifier electionActive() {
+        require(electionStarted, "Election has not started yet");
+        require(!electionEnded, "Election has already ended");
+        _;
+    }
+    
     // Add a candidate with IPFS image hash
     function addCandidate(string memory _name, string memory _description, string memory _ipfsImageHash) public onlyAdmin {
+        require(!electionStarted, "Cannot add candidates after election has started");
+        
         candidatesCount++;
         candidates[candidatesCount] = Candidate(
             candidatesCount,
@@ -50,12 +67,31 @@ contract Voting {
     
     // Add voters to the allowed list
     function addVoter(address _voter) public onlyAdmin {
+        require(!electionStarted, "Cannot add voters after election has started");
         allowedVoters[_voter] = true;
         emit VoterAdded(_voter);
     }
     
+    // Start the election and store voter list on IPFS
+    function startElection(string memory _voterListCID) public onlyAdmin {
+        require(!electionStarted, "Election has already started");
+        require(candidatesCount > 0, "No candidates added yet");
+        require(bytes(_voterListCID).length > 0, "Voter list CID is required");
+        
+        electionStarted = true;
+        voterListCID = _voterListCID;
+        
+        emit ElectionStarted(_voterListCID);
+    }
+    
+    // End the election
+    function endElection() public onlyAdmin electionActive {
+        electionEnded = true;
+        emit ElectionEnded();
+    }
+    
     // Vote for a candidate
-    function vote(uint256 _candidateId) public onlyAllowedVoter {
+    function vote(uint256 _candidateId) public onlyAllowedVoter electionActive {
         require(!voters[msg.sender], "You have already voted");
         require(_candidateId > 0 && _candidateId <= candidatesCount, "Invalid candidate ID");
         
@@ -80,9 +116,20 @@ contract Voting {
     
     // Add multiple voters at once
     function addMultipleVoters(address[] memory _voters) public onlyAdmin {
+        require(!electionStarted, "Cannot add voters after election has started");
         for(uint i = 0; i < _voters.length; i++) {
             allowedVoters[_voters[i]] = true;
             emit VoterAdded(_voters[i]);
         }
+    }
+    
+    // Get election status
+    function getElectionStatus() public view returns (
+        bool started,
+        bool ended,
+        string memory _voterListCID,
+        uint256 _candidatesCount
+    ) {
+        return (electionStarted, electionEnded, voterListCID, candidatesCount);
     }
 }
