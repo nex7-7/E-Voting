@@ -42,17 +42,28 @@ async function startLocalIpfsNode() {
           console.log('Configuring as main IPFS node...');
           startIpfsDaemon();
         } else {
-          // Connect to existing network
+          // Connect to existing network - improved flow
           rl.question('Enter the multiaddr of the main IPFS node to connect to: ', (multiaddr) => {
-            startIpfsDaemon();
             if (!multiaddr) {
               console.error('Main node multiaddr is required');
               rl.close();
               return;
             }
             
-            console.log(`Connecting to main IPFS node at: ${multiaddr}`);
-            connectToMainNode(multiaddr);
+            console.log('Starting IPFS daemon first...');
+            startIpfsDaemonWithPromise()
+              .then(() => {
+                console.log('IPFS daemon is ready! Waiting 5 seconds before connecting to the main node...');
+                // Add a delay to ensure locks are released
+                setTimeout(() => {
+                  console.log(`Connecting to main IPFS node at: ${multiaddr}`);
+                  connectToMainNode(multiaddr);
+                }, 5000); // 5 second delay
+              })
+              .catch(err => {
+                console.error('Failed to start IPFS daemon:', err);
+                rl.close();
+              });
           });
         }
       });
@@ -60,10 +71,70 @@ async function startLocalIpfsNode() {
   });
 }
 
+// Function to start the IPFS daemon and return a promise that resolves when ready
+function startIpfsDaemonWithPromise() {
+  return new Promise((resolve, reject) => {
+    console.log('Starting IPFS daemon...');
+    
+    // Start IPFS daemon with API and Gateway access from other machines
+    const command = 'ipfs daemon --enable-pubsub-experiment --enable-namesys-pubsub';
+    
+    console.log(`Running command: ${command}`);
+    
+    const ipfsProcess = exec(command);
+    
+    ipfsProcess.stdout.on('data', (data) => {
+      console.log(data);
+      
+      // When we see the "Daemon is ready" message, resolve the promise
+      if (data.includes('Daemon is ready')) {
+        exec('ipfs id', (err, stdout) => {
+          if (!err) {
+            try {
+              const idInfo = JSON.parse(stdout);
+              console.log('\n=====================================================');
+              console.log('IPFS node is ready!');
+              console.log('Your node ID:', idInfo.ID);
+              console.log('\nShareable addresses for other nodes to connect to:');
+              idInfo.Addresses.forEach(addr => {
+                console.log(addr);
+              });
+              console.log('=====================================================\n');
+              resolve();
+            } catch (e) {
+              console.error('Could not parse IPFS ID information');
+              resolve(); // Still resolve even if we can't parse the ID info
+            }
+          } else {
+            resolve(); // Still resolve even if we can't get ID info
+          }
+        });
+      }
+    });
+
+    ipfsProcess.stderr.on('data', (data) => {
+      console.error(`stderr: ${data}`);
+      // Don't reject on stderr as IPFS outputs some warnings there
+    });
+
+    ipfsProcess.on('error', (error) => {
+      console.error(`IPFS daemon error: ${error}`);
+      reject(error);
+    });
+
+    ipfsProcess.on('close', (code) => {
+      if (code !== 0) {
+        console.log(`IPFS daemon process exited with code ${code}`);
+        reject(new Error(`IPFS daemon exited with code ${code}`));
+      }
+    });
+  });
+}
+
+// Keep the original function for backward compatibility with the main node flow
 function startIpfsDaemon() {
   console.log('Starting IPFS daemon...');
   
-  // Start IPFS daemon with API and Gateway access from other machines
   const command = 'ipfs daemon --enable-pubsub-experiment --enable-namesys-pubsub';
   
   console.log(`Running command: ${command}`);
@@ -83,7 +154,6 @@ function startIpfsDaemon() {
   ipfsProcess.stdout.on('data', (data) => {
     console.log(data);
     
-    // When we see the "Daemon is ready" message, show the connection info
     if (data.includes('Daemon is ready')) {
       exec('ipfs id', (err, stdout) => {
         if (!err) {
