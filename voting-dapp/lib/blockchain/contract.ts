@@ -23,9 +23,16 @@ export interface ElectionStatus {
   candidatesCount: number;
 }
 
+// Type for voter event arguments
+interface VoterEventArgs {
+  voter?: string;
+  _voter?: string;
+  [key: string]: unknown;
+}
+
 export class VotingContract {
   private contract: ethers.Contract | null = null;
-  private provider: ethers.JsonRpcProvider | null = null;
+  private provider: ethers.Provider | null = null;
   private signer: ethers.Signer | null = null;
   
   // Contract address from deployment
@@ -33,15 +40,21 @@ export class VotingContract {
   
   async initialize() {
     try {
-      // Connect to local Hardhat node
-      this.provider = new ethers.JsonRpcProvider(networkConfig.rpcUrl);
-      
-      // Get the first account as signer (this is typically the deployer/admin in Hardhat)
-      const accounts = await this.provider.listAccounts();
-      if (accounts.length > 0) {
-        this.signer = accounts[0];
+      // Browser Environment - Check if window.ethereum exists (MetaMask or other wallet)
+      if (typeof window !== 'undefined' && window.ethereum) {
+        console.log("Browser wallet detected, requesting accounts...");
         
-        // Create contract instance
+        // Request account access if needed
+        await window.ethereum.request({ method: 'eth_requestAccounts' });
+        
+        // Create a Web3Provider using the injected provider
+        const browserProvider = new ethers.BrowserProvider(window.ethereum);
+        this.provider = browserProvider;
+        
+        // Get the signer (current connected account)
+        this.signer = await browserProvider.getSigner();
+        
+        // Create contract instance with signer
         this.contract = new ethers.Contract(
           this.contractAddress,
           VotingABI,
@@ -49,8 +62,34 @@ export class VotingContract {
         );
         
         return true;
+      } else {
+        // Fallback to JSON-RPC provider if not in browser or no wallet
+        console.log("No browser wallet detected, using RPC provider");
+        const jsonRpcProvider = new ethers.JsonRpcProvider(networkConfig.rpcUrl);
+        this.provider = jsonRpcProvider;
+        
+        try {
+          const accounts = await jsonRpcProvider.listAccounts();
+          if (accounts.length > 0) {
+            // Create a signer from the provider and the first account
+            this.signer = await jsonRpcProvider.getSigner(accounts[0].address);
+            
+            // Create contract instance with signer
+            this.contract = new ethers.Contract(
+              this.contractAddress,
+              VotingABI,
+              this.signer
+            );
+            
+            return true;
+          }
+          console.error("No accounts available from RPC provider");
+          return false;
+        } catch (providerError) {
+          console.error("Error connecting to provider:", providerError);
+          return false;
+        }
       }
-      return false;
     } catch (error) {
       console.error("Failed to initialize contract:", error);
       return false;
@@ -214,9 +253,9 @@ export class VotingContract {
             if (Array.isArray(args)) {
               return args[0]?.toString() || '';
             } else if (args) {
-              // Cast to any to avoid TypeScript property access restrictions
-              const argsAny = args as { voter?: string; _voter?: string };
-              return (argsAny.voter || argsAny._voter || '')?.toString();
+              // Cast to defined type instead of any
+              const argsTyped = args as VoterEventArgs;
+              return (argsTyped.voter || argsTyped._voter || '')?.toString();
             }
           }
           
@@ -296,8 +335,19 @@ export class VotingContract {
   async getCurrentAccount(): Promise<string | null> {
     try {
       if (!this.provider) await this.initialize();
-      const accounts = await this.provider!.listAccounts();
-      return accounts[0]?.address || null;
+      
+      // If we're using a browser wallet
+      if (this.signer && 'getAddress' in this.signer) {
+        return await this.signer.getAddress();
+      }
+      
+      // Fallback to provider's accounts if no browser wallet
+      if (this.provider instanceof ethers.JsonRpcProvider) {
+        const accounts = await this.provider.listAccounts();
+        return accounts[0]?.address || null;
+      }
+      
+      return null;
     } catch (error) {
       console.error("Error getting current account:", error);
       return null;
@@ -306,3 +356,10 @@ export class VotingContract {
 }
 
 export const votingContract = new VotingContract();
+
+// Extend Window interface to include ethereum property
+declare global {
+  interface Window {
+    ethereum?: any;
+  }
+}

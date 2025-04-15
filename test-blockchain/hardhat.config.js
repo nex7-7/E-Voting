@@ -70,5 +70,20 @@ module.exports = {
         interval: 5000 // Mining interval in milliseconds
       }
     },
+    hardhat: {
+      chainId: 1337,
+      mining: {
+        auto: true,
+        interval: 5000
+      }
+    },
+    localhost: {
+      url: "http://127.0.0.1:8545",
+    },
+    // Add this network configuration to allow external connections
+    local_network: {
+      url: "http://0.0.0.0:8545",  // Listen on all interfaces
+      chainId: 1337
+    }
   }
 };
