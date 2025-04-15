@@ -44,6 +44,7 @@ async function startLocalIpfsNode() {
         } else {
           // Connect to existing network
           rl.question('Enter the multiaddr of the main IPFS node to connect to: ', (multiaddr) => {
+            startIpfsDaemon();
             if (!multiaddr) {
               console.error('Main node multiaddr is required');
               rl.close();
@@ -124,7 +125,6 @@ function connectToMainNode(multiaddr) {
     }
     
     console.log(`Connected to main node: ${stdout.trim()}`);
-    startIpfsDaemon();
   });
 }
 
