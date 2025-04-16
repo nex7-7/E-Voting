@@ -1,0 +1,6 @@
+{
+  "miningNodeIp": "192.168.29.203",
+  "miningNodePort": 8545,
+  "chainId": 1337,
+  "networkId": 1337
+}

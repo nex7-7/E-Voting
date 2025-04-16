@@ -6,7 +6,7 @@ const { uploadToIPFS } = require('./ipfs-config');
 
 async function main() {
   // Get the IP from command line args or use default
-  const targetIp = process.argv[2] || "192.168.29.203";
+  const targetIp = process.argv[2] || "10.125.28.235";
   console.log(`Deploying to node at: ${targetIp}:8545`);
   
   // Use a custom provider pointing to the running node

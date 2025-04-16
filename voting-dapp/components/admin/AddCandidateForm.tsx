@@ -23,7 +23,7 @@ const formSchema = z.object({
 type FormData = z.infer<typeof formSchema>;
 
 export default function AddCandidateForm() {
-  const { addCandidate, electionStarted } = useWeb3();
+  const { addCandidate, electionStarted, electionEnded } = useWeb3();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -87,14 +87,19 @@ export default function AddCandidateForm() {
     }
   };
 
-  if (electionStarted) {
+  // Check if election is active or ended
+  if (electionStarted || electionEnded) {
     return (
       <Card>
         <CardHeader>
           <CardTitle>Add Candidate</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-red-500">Cannot add candidates after election has started</p>
+          <p className="text-red-500">
+            {electionEnded 
+              ? "Cannot add candidates after election has ended" 
+              : "Cannot add candidates after election has started"}
+          </p>
         </CardContent>
       </Card>
     );

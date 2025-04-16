@@ -37,7 +37,7 @@ type SingleFormData = z.infer<typeof singleVoterSchema>;
 type MultipleFormData = z.infer<typeof multipleVotersSchema>;
 
 export default function RegisterVoterForm() {
-  const { registerVoter, batchRegisterVoters, electionStarted } = useWeb3();
+  const { registerVoter, batchRegisterVoters, electionStarted, electionEnded } = useWeb3();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [registrationMethod, setRegistrationMethod] = useState<RegistrationMethod>("single");
   const [csvFile, setCsvFile] = useState<File | null>(null);
@@ -173,12 +173,14 @@ export default function RegisterVoterForm() {
                     </FormItem>
                   )}
                 />
-                <Button type="submit" disabled={isSubmitting || electionStarted}>
+                <Button type="submit" disabled={isSubmitting || electionStarted || electionEnded}>
                   {isSubmitting ? "Registering..." : "Register Voter"}
                 </Button>
-                {electionStarted && (
+                {(electionStarted || electionEnded) && (
                   <p className="text-sm text-red-500 mt-2">
-                    Cannot register voters after election has started
+                    {electionEnded 
+                      ? "Cannot register voters after election has ended" 
+                      : "Cannot register voters after election has started"}
                   </p>
                 )}
               </form>
@@ -205,12 +207,14 @@ export default function RegisterVoterForm() {
                     </FormItem>
                   )}
                 />
-                <Button type="submit" disabled={isSubmitting || electionStarted}>
+                <Button type="submit" disabled={isSubmitting || electionStarted || electionEnded}>
                   {isSubmitting ? "Registering..." : "Register Voters"}
                 </Button>
-                {electionStarted && (
+                {(electionStarted || electionEnded) && (
                   <p className="text-sm text-red-500 mt-2">
-                    Cannot register voters after election has started
+                    {electionEnded 
+                      ? "Cannot register voters after election has ended" 
+                      : "Cannot register voters after election has started"}
                   </p>
                 )}
               </form>
@@ -227,7 +231,7 @@ export default function RegisterVoterForm() {
                   type="file"
                   accept=".csv,.txt"
                   onChange={handleCsvUpload}
-                  disabled={isSubmitting || electionStarted}
+                  disabled={isSubmitting || electionStarted || electionEnded}
                 />
               </div>
               
@@ -236,14 +240,16 @@ export default function RegisterVoterForm() {
                   <p className="text-sm text-muted-foreground">
                     {csvAddresses.length} valid addresses found
                   </p>
-                  <Button onClick={onCsvSubmit} disabled={isSubmitting || electionStarted}>
+                  <Button onClick={onCsvSubmit} disabled={isSubmitting || electionStarted || electionEnded}>
                     {isSubmitting ? "Registering..." : `Register ${csvAddresses.length} Voters`}
                   </Button>
                 </div>
               )}
-              {electionStarted && (
+              {(electionStarted || electionEnded) && (
                 <p className="text-sm text-red-500">
-                  Cannot register voters after election has started
+                  {electionEnded 
+                    ? "Cannot register voters after election has ended" 
+                    : "Cannot register voters after election has started"}
                 </p>
               )}
             </div>
